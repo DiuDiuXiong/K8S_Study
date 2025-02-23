@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: myapp-rc
+  labels:
+    app: myapp
+    type: front-end
+spec:
+  template:
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+        tier: frontend
+        type: frontend
+    spec:
+      containers:
+        - name: nginx
+          image: nginx
+        - name: busybox
+          image: busybox
+  replicas: 10
+  selector: # for pods created before replica set
+    matchLabels:
+      type: frontend

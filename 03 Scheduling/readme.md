@@ -95,13 +95,13 @@ It is most important to have requests, so that app work as expected, it is a gua
 ```yaml
 spec:
   containers:
-    - resources:
-        requests:
-          memory: "64Mi"  # 64 Mebibytes (recommended)
-          cpu: "250m"
-        limits:
-          memory: "1Gi"   # 1 Gibibyte (recommended)
-          cpu: "1"
+    resources:
+      requests:
+        memory: "64Mi"  # 64 Mebibytes (recommended)
+        cpu: "250m"
+      limits:
+        memory: "1Gi"   # 1 Gibibyte (recommended)
+        cpu: "1"
 ```
 
 Or we can use `LimitRange`: https://kubernetes.io/docs/concepts/policy/limit-range/, these values will get filled default to Pod, so remember to include set request & limit if request > default limit. `kubectl apply -f limit-range.yaml -n <your-namespace>`

@@ -125,3 +125,64 @@ spec:
 Note that max/min is a strict range. We can also constrain the total consumed by a namespace by resource quota: https://kubernetes.io/docs/concepts/policy/resource-quotas/
 
 You cannot edit the environment variables, service accounts, resource limits (all of which we will discuss later) of a running pod. With Deployments you can easily edit any field/property of the POD template. Since the pod template is a child of the deployment specification,  with every change the deployment will automatically delete and create a new pod with the new changes.
+
+## DaemonSet
+One per node, whenever a new node added, a daemon set automatically added to that node. Something like anti-virus or monitoring agents. Or like kube-proxy/weave-net.
+
+Yaml: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/daemon-set-v1/, everything is same as replicaset, despite kind.
+
+- `kubectl get daemonsets <...>`
+- This is done by node-affinity.
+
+## Static Pods
+This is the case that worker node completely lost master. By placing pod definition in `/etc/kubernetes/manifests`, it periodically scan the folder and create pods. (we can only do this to pods). This is called static pod. Config is usually at: `/var/lib/kubelet/config.yaml`
+
+- path is set by: `--pod-manifest-path=` when start `kubelet`
+- or `staticPodPath` and share it in `--config=<yml>`
+- since we don't have api server, we should use `docker ps` to check
+- when we create a static pod, there will be a mirror record in master, but we cannot modify or delete
+- its mostly used for control-plane itself, and can create those pods under kubectl-system, which does not rely on existing kube-api server
+- `kubectl get pods <podname> -o yaml` -> check ownerReferences, if it is node, then it is a static pod.
+
+## Multiple Scheduler
+We can have more than one scheduler, in the end, it will just start as another pod in kube-system, see reference at: https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/ Need to define config file and reference that when start the scheduler.
+- Set up the authentication
+- define the: `my-scheduler-config.yaml`
+- then in the `config-map.yaml`, have `profiles: - schedulerName: my-scheduler`, there can be more than one profiles. And can disable/enable multiple plugins there.
+- then apply Deployment
+- then in pod: `spec.schedulerName` to map to the name, if name does not exist, will wait forever.
+
+We can then verify by:
+- `kubectl get pods -A` to see if there are more than one named scheduler
+- `kubectl get events -o wide` to see the source, the source might be other than default scheduler
+- `kubectl log <scheduler name> -n=kube-system` can see details for that scheduler
+
+## Admission Controllers
+Role-Based Access Control (RBAC) determines who can perform what actions on Kubernetes resources (like creating, deleting, 
+or modifying pods, services, etc.) via the API server. Admission controllers, on the other hand, act as gatekeepers that 
+can intercept and potentially modify or reject requests to the API server before they are persisted, allowing for 
+fine-grained control over the content and validity of those requests, going beyond simple permission checks.
+
+- `kube-apiserver -h | grep enable-admission-plugins` need to run in control plane node
+
+Src: https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/
+- To turn on: `kube-apiserver --enable-admission-plugins=NamespaceLifecycle,LimitRanger ...`
+- To turn off: `kube-apiserver --disable-admission-plugins=PodNodeSelector,AlwaysDeny ...`
+- `ps aux | grep kube-apiserver` to see options, `kube-apiserver` may not always stand as an executable. We need to exec into api server to run those commands.
+  - `kubectl exec -it <pod name> -n kube-system <kube-apiserver command>` :)
+  - `/etc/kubernetes/manifests/kube-apiserver.yaml` for more details, this is a static pod so can edit and wait for api-server restart.
+
+- The `NamespaceLifecycle` admission controller will make sure that requests to a non-existent namespace is rejected and that the default namespaces such as default, kube-system and kube-public cannot be deleted.
+- `NamespaceAutoProvision` create n if not exist before
+
+## Validating and Mutating Admission Controllers
+- Validating Admission Controller: Check & Validate some operations
+- Mutating Admission Controller: (e.g. DefaultStorageClass) that do some change to objects before its creation
+- There are some admission controllers can do both.
+- Mutating before Validating, so its change can also be validated.
+
+We can define our own configuration rules, maybe we don't want pod name same as username.
+1. Define the code: https://github.com/gkampitakis/k8s-dac-demo/blob/main/webhook-server/main.go
+2. Create required TLS secrets
+3. Make the code as a deployment & a service pointing to that
+4. https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/ have either `ValidatingWebhookConfiguration` or `MutatingWebhookConfiguration`, and point to the service. Can then add rules there to select which resource will get directed there.

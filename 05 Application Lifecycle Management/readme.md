@@ -49,9 +49,54 @@ After creation, mount the config into pod:
   - `name: ENV_KEY`:
       - `valueFrom`:
          - `configMapKeyRef`:
-            `name`: config name
-            `key`: key name
+           `name`: config name
+           `key`: key name
 
 Or can use volume as described in yaml links.
 
 ### Configure secrets
+
+To create secret:
+- `kubectl create secrets generic --from-literal=key1=val1...`
+- `kubectl create secrets generic --from-file=example.properties` (do not need to be base 64 encoded)
+- yaml: https://kubernetes.io/docs/concepts/configuration/secret/, node that the value need to get based 64 encoded `echo "wuji" | base64`
+- Note that when mount via volume, the secret value will be in the <mount path>/<key_name> file
+- `kubectl get secrets` get secret name
+- `kubectl describe secrets <secret name>` this won't show the value at all
+- `kubectl get secret <secret name> -o yaml` to get secret base64 value `echo "secret abse64" | base64 --decode` to actually get the value
+- To mount, either via volume as shown in the yaml, or `kubectl explain pod.spec.containers.env.valueFrom.secretKeyRef` to inject into secret or `kubectl explain pod.spec.containers.envFrom.secretRef` to inject many
+
+Something special to node:
+- secret are not secure, they are just base64 encoded with few more measures
+- anyone who can create pod in a ns can create/view secrets, so need to do right RBAC
+- consider third party secret providers
+- A secret is only sent to a node if a pod on that node requires it.
+- Kubelet stores the secret into a tmpfs so that the secret is not written to disk storage.
+- Once the Pod that depends on the secret is deleted, kubelet will delete its local copy of the secret data as well.
+
+More advanced as CKS :) coming soon
+
+## Multi-Container Pods
+These are pods that get created together and destroyed together. They share same volumes networks etc... Just add more containers under the list of `pod.spec.containers`.
+Some common patterns are:
+- Container + Logger (SideCar)
+- Container + Adaptor (Adaptor)
+- Container + Ambassador (Ambassador)
+More in CKAD :)
+
+## Init-Containers
+In a multi-container pod, each container is expected to run a process that stays alive as long as the POD's lifecycle. 
+For example in the multi-container pod that we talked about earlier that has a web application and logging agent, both 
+the containers are expected to stay alive at all times. The process running in the log agent container is expected to 
+stay alive as long as the web application is running. If any of them fails, the POD restarts.
+
+But at times you may want to run a process that runs to completion in a container. For example a process that pulls a 
+code or binary from a repository that will be used by the main web application. That is a task that will be run only 
+one time when the pod is first created. Or a process that waits  for an external service or database to be up before 
+the actual application starts. That's where initContainers comes in.
+
+An initContainer is configured in a pod like all other containers, except that it is specified inside a `initContainers` section -> `pod.spec.initContainers`
+
+When a POD is first created the initContainer is run, and the process in the initContainer must run to a completion before the real container hosting the application starts.
+You can configure multiple such initContainers as well, like how we did for multi-containers pod. In that case each init container is run one at a time in sequential order.
+If any of the initContainers fail to complete, Kubernetes restarts the Pod repeatedly until the Init Container succeeds.

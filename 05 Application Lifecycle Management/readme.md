@@ -100,3 +100,89 @@ An initContainer is configured in a pod like all other containers, except that i
 When a POD is first created the initContainer is run, and the process in the initContainer must run to a completion before the real container hosting the application starts.
 You can configure multiple such initContainers as well, like how we did for multi-containers pod. In that case each init container is run one at a time in sequential order.
 If any of the initContainers fail to complete, Kubernetes restarts the Pod repeatedly until the Init Container succeeds.
+
+## Auto Scaling
+More advanced at: https://learn.kodekloud.com/user/courses/kubernetes-autoscaling
+
+- Vertical Scaling: Increases resources (CPU, memory) of an existing server.
+- Horizontal Scaling: Increases server count by adding more instances.
+
+Kubernetes is specifically designed for hosting containerized applications and incorporates scaling based on current demands. It supports two main scaling types:
+- Workload Scaling: Adjusting the number of containers or Pods running in the cluster.
+  - Horizontal Scaling: Create additional Pods. `kubectl scale ...` or HPA (horizontal pod auto scaler)
+  - Vertical Scaling: Modify the resource limits and requests for existing Pods. `kubectl edit ...` VPA (vertical pod auto scaler)
+- Cluster (Infrastructure) Scaling: Adding or removing nodes (servers) from the cluster.
+  - Horizontal Scaling: Add more nodes. `kubectl join ...` or cluster autoscaler
+  - Vertical Scaling: Enhance the resources (CPU, memory) of existing nodes (very rare)
+
+If we scale deployment to level such that there's no sufficient resource to support that, some parts will be created, and deployment will remain in pending.
+
+## HPA (Horizontal Pod Autoscaler)
+HPA can set some target so that K8S will create more pods if some top metrics exceed certain threshold. If it belows certain threshold, it will try to scale down to meet that.
+HPA will fail if the resource field missing in the pod deployment. Note, this is reference to `requests`.
+
+
+To create HPA, need to enable metric server on.
+
+- declarative way: Yaml at: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/
+- imperative way: `kubectl autoscale deployment my-app --cpu-percent=50 --min=1 --max=10` (for existing deployment)
+- `kubectl get hpa` to see target/current
+- `kubectl delete hpa my-app` to delete hpa
+
+## VPA
+For manual methods, if we edit the requests, the default will destroy & recreate. There is an alpha for inplace resize: https://kubernetes.io/docs/concepts/workloads/autoscaling/#requirements-for-in-place-resizing.
+
+Some drawbacks:
+- Supported Resources: Only CPU and memory can be updated in place.
+- QoS Class: The Pod Quality of Service (QoS) class cannot be modified through in-place resizing.
+- Container Eligibility: Init containers and ephemeral containers are not eligible for resizing.
+- Immutable Resource Positions: Once set, a container's resource requests and limits cannot be repositioned.
+- Memory Limit Constraints: A container’s memory limit cannot be reduced below its current usage. If an update attempts to lower the memory limit too far, the resize operation will remain in progress until a permissible limit is reached.
+- Platform Support: Windows Pods are not supported by the in-place resizing feature at this time.
+
+VPA:
+- `git clone https://github.com/kubernetes/autoscaler.git` && `cd autoscaler/vertical-pod-autoscaler` && `./hack/vpa-up.sh`
+- VPA Recommender: Continuously monitors resource usage via the Kubernetes metrics API, aggregates historical and live data, and provides recommendations for optimal CPU and memory allocations.
+- VPA Updater: Evaluates running pods against recommendations, evicting those with suboptimal resource requests.
+- VPA Admission Controller: Intercepts the pod creation process and mutates pod specifications based on the recommender's suggestions, ensuring new pods start with proper resource allocations.
+
+We then need to a configuration to let the three watch/map to some deployment. 
+
+```yaml
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: my-app-vpa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: "my-app"
+      minAllowed:
+        cpu: "250m"
+      maxAllowed:
+        cpu: "2"
+      controlledResources: ["cpu"]
+```
+
+This is something very alpha. Note, the auto scale is based on original Pod's resource requests & `controlledResources`.
+
+- Auto	目前是 Recreate，将来可能改为就地更新
+- Recreate	VPA 会在创建 Pod 时分配资源请求，并且当请求的资源与新的建议值区别很大时通过驱逐 Pod 的方式来更新现存的 Pod
+- Initial	VPA 只有在创建时分配资源请求，之后不做更改
+- Off	VPA 不会自动更改 Pod 的资源需求，建议值仍会计算并可在 VPA 对象中查看
+
+Use  `kubectl get vpa flask-app -o yaml` to get the recommended value.
+
+| Feature                     | Vertical Pod Autoscaler (VPA)                                                              | Horizontal Pod Autoscaler (HPA)                                                                  |
+|-----------------------------|--------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| Scaling Method              | Adjusts CPU and memory configurations for individual pods (may require pod restarts)       | Scales the number of pods based on demand                                                       |
+| Pod Behavior                | Might cause downtime due to pod restarts during resource updates                           | Typically maintains availability by adding or removing pods on the fly                           |
+| Traffic Spikes              | Less effective during sudden spikes, as pod restarts are needed                            | More responsive to rapid traffic changes by dynamically adjusting pod count                      |
+| Cost Optimization           | Prevents over-provisioning by matching resource allocations with actual usage             | Reduces costs by eliminating the overhead of running idle pods                                 |
+| Ideal Use Cases             | Best suited for stateful workloads and resource-intensive applications (e.g., databases, JVM apps, AI workloads) | Ideal for stateless services like web applications and microservices where quick scaling is crucial |

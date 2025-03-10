@@ -1,0 +1,1 @@
+Just for learning purpose: https://notes.kodekloud.com/docs/CKA-Certification-Course-Certified-Kubernetes-Administrator/Design-and-Install-a-Kubernetes-Cluster/Design-a-Kubernetes-Cluster

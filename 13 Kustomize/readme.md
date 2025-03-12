@@ -184,3 +184,61 @@ patch: |-
     path: /spec/replicas
     value: 2
 ```
+
+## Components
+Sometime we want to create some elements that are:
+- shared by some flavor
+- not shared by all flavor
+
+In this case, we want to create it as components and import within flavor files.
+
+```yaml
+k8s/
+├── base/
+│   ├── kustomization.yaml
+│   └── api-depl.yaml
+├── components/
+│   ├── caching/
+│   │   ├── kustomization.yaml
+│   │   ├── deployment-patch.yaml
+│   │   └── redis-depl.yaml
+│   └── db/
+│       ├── kustomization.yaml
+│       ├── deployment-patch.yaml
+│       └── postgres-depl.yaml
+└── overlays/
+    ├── dev/
+    │   └── kustomization.yaml
+    ├── premium/
+    │   └── kustomization.yaml
+    └── standalone/
+        └── kustomization.yaml
+```
+
+In this setup:
+- Base contains shared configurations.
+- Overlays (dev, premium, standalone) inherit from the Base.
+- Components store isolated configurations for individual features, such as caching and external database (db). Each component directory includes all the necessary Kubernetes resources to enable the feature.
+
+The kustomization file within components should look like:
+```yaml
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - postgres-depl.yaml
+secretGenerator:
+  - name: postgres-cred
+    literals:
+      - password=postgres123
+patches:
+  - deployment-patch.yaml
+```
+
+And we can just import it like:
+
+```yaml
+bases:
+  - ../../base
+components:
+  - ../../components/db
+```

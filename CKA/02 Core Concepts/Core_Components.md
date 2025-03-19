@@ -23,7 +23,7 @@ The smallest units of application inside K8S. We create new pods for orchestrati
   - `kubectl describe pod <pod name>` for details, can see container status and logs at event section
   - `kubectl delete pod <pod name> ... <more pod names>` to delete
   - yaml: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/
-    - [example](./POD.yaml)
+    - [example](POD.yaml)
     - `metadata`: `name` for name, `label`: for key-val labels
     - `spec`: 
       - `containers`: 

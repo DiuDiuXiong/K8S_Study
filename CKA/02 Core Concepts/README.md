@@ -64,4 +64,4 @@ When a Pod on a node attempts to access a Service, kube-proxy's configuration (p
 on that node) redirects the traffic to one of the healthy Pods that implement the Service.
 
 ## Core Components
-- [SRC](./Core_Components.md)
+- [SRC](Core_Components.md)

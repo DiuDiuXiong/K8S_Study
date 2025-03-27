@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: read-host-file
+  name: read-host-file
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: read-host-file
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: read-host-file
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: master-01
+      containers:
+      - image: busybox
+        name: busybox
+        resources: {}
+        volumeMounts:
+          - name: host-volume
+            mountPath: /data
+        command:
+          - "sh"
+          - "-c"
+          - "ls /data && while true; do ls /data; sleep 1; done"
+      initContainers:
+      - name: read-local-file
+        image: busybox
+        command:
+          - "touch"
+          - "/data/data.txt"
+        volumeMounts:
+        - name: host-volume
+          mountPath: /data
+      volumes:
+        - name: host-volume
+          hostPath:
+            path: /root
+            type: Directory
